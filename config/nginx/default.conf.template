@@ -1,0 +1,82 @@
+# Блок upstream для сервиса UWSGI
+upstream uwsgi_app {
+    # Указание расположения Unix-сокета
+    server unix:/code/educa/uwsgi_app.sock;
+}
+
+# Блок upstream для процесса Daphne
+upstream daphne {
+    # Указание расположения процесса на порте 9001
+    server daphne:9001;
+}
+
+# Блок server для обслуживания http-запросов
+server {
+    # Указание порта listen (в данном случае port 80)
+    listen       80;
+
+    # Указание доменов, обслуживаемых этим сервером
+    server_name *.elearning.com elearning.com;
+
+    # Перенаправление http-запросов на https-адрес сайта
+    return 301 https://$host$request_uri;
+}
+
+# Блок server для обслуживания https-запросов (используя SSL-сертификат)
+server {
+    # Указание порта listen (в данном случае port 443) и использования SSL-сертификата
+    listen       443 ssl;
+
+    # Указание файла с SSL-сертификатом
+    ssl_certificate      /code/educa/ssl/educa.crt;
+
+    # Указание файла ключа сертификата
+    ssl_certificate_key  /code/educa/ssl/educa.key;
+
+    # Указание доменов, обслуживаемых этим сервером
+    server_name  *.elearning.com elearning.com;
+
+    # Указание уровня логирования ошибок (в данном случае warn)
+    error_log    stderr warn;
+
+    # Указание источника записей лога доступа (в данном случае stdout с форматом main)
+    access_log   /dev/stdout main;
+
+    # Блок location для обслуживания корневого URL-адреса
+    location / {
+        # Включение параметров из файла конфигурации uwsgi_params
+        include      /etc/nginx/uwsgi_params;
+
+        # Указание сервиса UWSGI, к которому будут направляться запросы
+        uwsgi_pass   uwsgi_app;
+    }
+
+    # Блок location для обслуживания URL-адреса /ws/
+    location /ws/ {
+        # Указание процесса Daphne, к которому будут направляться запросы
+        proxy_pass          http://daphne;
+
+        # Установка версии HTTP (в данном случае 1.1)
+        proxy_http_version  1.1;
+
+        # Установка заголовков для обновления соединения
+        proxy_set_header    Upgrade $http_upgrade;
+        proxy_set_header    Connection "upgrade";
+
+        # Отключение перенаправлений URL-адресов
+        proxy_redirect      off;
+    }
+
+    # Блок location для обслуживания URL-адреса /static/
+    location /static/ {
+        # Установка alias в файловой системе с путем /code/educa/static/
+        alias /code/educa/static/;
+    }
+
+    # Блок location для обслуживания URL-адреса /media/
+    location /media/ {
+        # Установка alias в файловой системе с путем /code/educa/media/
+        alias /code/educa/media/;
+    }
+}
+
